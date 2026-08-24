@@ -1,46 +1,3 @@
-.github/workflows/linux-server.yml
-
-
-
-TAILSCALE_AUTHKEY
-
-
-----------------------------------------------------------------------------------------
-
-
-
-
-
-
-
-name: Permanent Linux SSH Server
-
-on:
-  schedule:
-    - cron: '0 */6 * * *'  # روشن شدن خودکار هر ۶ ساعت یک‌بار (۲۴/۷)
-  workflow_dispatch:        # استارت دستی با دکمه Run
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
-
-    steps:
-      - name:1. Checkout Repository
-        uses: actions/checkout@v4
-
-      # بازیابی هارد ابری دائمی
-      - name: Restore Persistent Workspace
-        uses: actions/cache@v4
-        with:
-          path: /home/cynetadmin/workspace
-          key: cynet-ssh-workspace-${{ github.run_id }}
-          restore-keys: |
-            cynet-ssh-workspace-
-
-      - name: 3. SSHX Session
-        run: |
-          sudo apt-get update
 name: Permanent Linux SSH Server
 
 on:
@@ -70,23 +27,6 @@ jobs:
         run: |
           sudo apt-get update
           curl -sSf https://sshx.io/get | sh -s run
-
-
-      - name: Server Keep-Alive (5h 55m)
-        run: |
-          for i in {1..355}; do
-            sleep 60
-            echo "[$i/355] Linux SSH Server is active..."
-          done
-
-      - name: Save Workspace to Cloud
-        uses: actions/cache@v4
-        if: always()
-        with:
-          path: /home/cynetadmin/workspace
-          key: cynet-ssh-workspace-${{ github.run_id }}
-curl -sSf https://sshx.io/get | sh -s run
-
 
       - name: Server Keep-Alive (5h 55m)
         run: |
