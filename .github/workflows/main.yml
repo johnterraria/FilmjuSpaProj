@@ -11,10 +11,8 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name:1. Checkout Repository
-        uses: actions/checkout@v4
-
-      # بازیابی هارد ابری دائمی
+      - uses: actions/checkout@v4
+       
       - name: Restore Persistent Workspace
         uses: actions/cache@v4
         with:
