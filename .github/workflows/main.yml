@@ -1,0 +1,66 @@
+name: Windows Cloud RDP via Bore
+on:
+  workflow_dispatch:
+
+jobs:
+  tunnel:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ALL
+        run: |
+          Write-host "Free Github RDP Windows Server."
+          Write-host ""
+          Write-host "Enableing Remote Desktop and Firewall..."
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
+          Write-host "Creating Admin User..."
+          $Password = ConvertTo-SecureString "Cynet@2026" -AsPlainText -Force
+          New-LocalUser -Name "CynetAdmin" -Password $Password -PasswordNeverExpires -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Administrators" -Member "CynetAdmin" -ErrorAction SilentlyContinue
+          net user runneradmin Cynet@2026
+          Write-host "Install bore..."
+          cargo install bore-cli
+          # bore prints its assigned port to stdout as it connects
+          Start-Process -NoNewWindow -FilePath "bore" `
+            -ArgumentList "local", "3389", "--to", "bore.pub" `
+            -RedirectStandardOutput "bore.log" `
+            -RedirectStandardError "bore_err.log"
+
+          Write-Host "Waiting for tunnel to establish..."
+          $remotePort = $null
+          for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep -Seconds 1
+            foreach ($logFile in @("bore.log", "bore_err.log")) {
+              if (Test-Path $logFile) {
+                $content = Get-Content $logFile -Raw -ErrorAction SilentlyContinue
+                if ($content -match 'remote_port=(\d+)') {
+                  $remotePort = $matches[1]
+                  break
+                }
+                if ($content -match 'listening at bore\.pub:(\d+)') {
+                  $remotePort = $matches[1]
+                  break
+                }
+              }
+            }
+            if ($remotePort) { break }
+          }
+
+          if (-not $remotePort) {
+            Write-Host "Failed to get tunnel port. Logs:"
+            Get-Content "bore.log" -ErrorAction SilentlyContinue
+            Get-Content "bore_err.log" -ErrorAction SilentlyContinue
+            exit 1
+          }
+
+          $url = "bore.pub:$remotePort"
+          Write-Host "==================================================" -ForegroundColor Green
+          Write-Host "  >>> RDP SERVER IS READY! <<<" -ForegroundColor Cyan
+          Write-Host "  RDP Address : $url" -ForegroundColor Yellow
+          Write-Host "  Username  : CynetAdmin" -ForegroundColor Yellow
+          Write-Host "  Password  : Cynet@2026" -ForegroundColor Yellow
+          Write-Host "  >> Open mstsc and connect to: $url" -ForegroundColor Magenta
+          Write-Host "==================================================" -ForegroundColor Green
+          Start-Sleep -Seconds 21300   # ~5h55m, leaves buffer under the 6h job cap
