@@ -20,10 +20,46 @@ jobs:
           New-LocalUser -Name "CynetAdmin" -Password $Password -PasswordNeverExpires -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Administrators" -Member "CynetAdmin" -ErrorAction SilentlyContinue
           net user runneradmin Cynet@2026
-          Write-host "Install bore..."
-          cargo install bore-cli
-          # bore prints its assigned port to stdout as it connects
-          Start-Process -NoNewWindow -FilePath "bore" `
+          Write-host "Instaling bore..."
+          $ErrorActionPreference = "Stop"
+          Write-Host "Fetching latest bore release info..."
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/ekzhang/bore/releases/latest"
+
+          $asset = $release.assets | Where-Object {
+            $_.name -match "windows" -and $_.name -notmatch "\.sha256$"
+          } | Select-Object -First 1
+
+          if (-not $asset) {
+            Write-Host "Could not find a matching Windows asset. Available assets:"
+            $release.assets | ForEach-Object { Write-Host $_.name }
+            exit 1
+          }
+
+          Write-Host "Downloading: $($asset.browser_download_url)"
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "bore_dl$([System.IO.Path]::GetExtension($asset.name))"
+
+          $downloaded = "bore_dl$([System.IO.Path]::GetExtension($asset.name))"
+
+          if ($downloaded -like "*.zip") {
+            Expand-Archive -Path $downloaded -DestinationPath "." -Force
+          } else {
+            Rename-Item -Path $downloaded -NewName "bore.exe"
+          }
+
+          # Confirm the binary exists and works
+          if (-not (Test-Path "bore.exe")) {
+            # Search in case it extracted into a subfolder
+            $found = Get-ChildItem -Recurse -Filter "bore.exe" | Select-Object -First 1
+            if ($found) {
+              Copy-Item $found.FullName -Destination "bore.exe"
+            } else {
+              Write-Host "bore.exe not found after extraction."
+              exit 1
+            }
+          }
+
+          .\bore.exe --version
+          Start-Process -NoNewWindow -FilePath ".\bore.exe" `
             -ArgumentList "local", "3389", "--to", "bore.pub" `
             -RedirectStandardOutput "bore.log" `
             -RedirectStandardError "bore_err.log"
