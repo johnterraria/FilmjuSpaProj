@@ -39,8 +39,7 @@ jobs:
           echo "Fetching latest bore release info..."
           RELEASE_JSON=$(curl -s https://api.github.com/repos/ekzhang/bore/releases/latest)
 
-          # Find the linux x86_64 asset (gnu or musl build)
-          ASSET_URL=$(echo "$RELEASE_JSON" | grep -oE '"browser_download_url": *"[^"]*linux[^"]*x86_64[^"]*"' | grep -v '\.sha256' | head -1 | sed -E 's/"browser_download_url": *"([^"]*)"/\1/')
+          ASSET_URL=$(echo "$RELEASE_JSON" | grep -oE '"browser_download_url": *"[^"]*x86_64-unknown-linux-musl\.tar\.gz"' | head -1 | sed -E 's/"browser_download_url": *"([^"]*)"/\1/')
 
           if [ -z "$ASSET_URL" ]; then
             echo "Could not find a matching Linux asset. Full release JSON:"
@@ -50,14 +49,7 @@ jobs:
 
           echo "Downloading: $ASSET_URL"
           curl -L -o bore.tar.gz "$ASSET_URL"
-
-          # Handle both tar.gz and raw binary cases
-          if file bore.tar.gz | grep -q 'gzip compressed'; then
-            tar -xzf bore.tar.gz
-          else
-            mv bore.tar.gz bore
-          fi
-
+          tar -xzf bore.tar.gz
           chmod +x bore
           ./bore --version
           ./bore local 8080 --to bore.pub > bore.log 2>&1 &
