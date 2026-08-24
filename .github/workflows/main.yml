@@ -1,5 +1,4 @@
-
-name: Permanent Linux SSH Server Via Bore
+name: Permanent Linux SSH Server
 
 on:
   schedule:
@@ -12,9 +11,11 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - uses: actions/checkout@v4
+      - name:1. Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: "PRE-RUN: Restore Persistent Workspace"
+      # بازیابی هارد ابری دائمی
+      - name: Restore Persistent Workspace
         uses: actions/cache@v4
         with:
           path: /home/cynetadmin/workspace
@@ -22,77 +23,20 @@ jobs:
           restore-keys: |
             cynet-ssh-workspace-
 
-      - name: ALL
+      - name: 3. SSHX Session
         run: |
           sudo apt-get update
-          sudo apt-get install -y openssh-server
-          sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-          sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
-          sudo systemctl restart ssh
-          sudo useradd -m -s /bin/bash cynetadmin || true
-          echo "cynetadmin:Cynet@2026" | sudo chpasswd
-          sudo usermod -aG sudo cynetadmin
-          echo "cynetadmin ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/cynetadmin
-          sudo mkdir -p /home/cynetadmin/workspace
-          sudo chown -R cynetadmin:cynetadmin /home/cynetadmin/workspace
-          set -e
-          echo "Fetching latest bore release info..."
-          RELEASE_JSON=$(curl -s https://api.github.com/repos/ekzhang/bore/releases/latest)
+          curl -sSf https://sshx.io/get | sh -s run
 
-          ASSET_URL=$(echo "$RELEASE_JSON" | grep -oE '"browser_download_url": *"[^"]*x86_64-unknown-linux-musl\.tar\.gz"' | head -1 | sed -E 's/"browser_download_url": *"([^"]*)"/\1/')
 
-          if [ -z "$ASSET_URL" ]; then
-            echo "Could not find a matching Linux asset. Full release JSON:"
-            echo "$RELEASE_JSON"
-            exit 1
-          fi
-
-          echo "Downloading: $ASSET_URL"
-          curl -L -o bore.tar.gz "$ASSET_URL"
-          tar -xzf bore.tar.gz
-          chmod +x bore
-          ./bore --version
-          ./bore local 8080 --to bore.pub > bore.log 2>&1 &
-
-          echo "Waiting for tunnel to establish..."
-          REMOTE_PORT=""
-          for i in $(seq 1 30); do
-            sleep 1
-            if grep -qoE 'remote_port=[0-9]+' bore.log 2>/dev/null; then
-              REMOTE_PORT=$(grep -oE 'remote_port=[0-9]+' bore.log | head -1 | cut -d= -f2)
-              break
-            fi
-            if grep -qoE 'listening at bore\.pub:[0-9]+' bore.log 2>/dev/null; then
-              REMOTE_PORT=$(grep -oE 'listening at bore\.pub:[0-9]+' bore.log | head -1 | grep -oE '[0-9]+$')
-              break
-            fi
-          done
-
-          if [ -z "$REMOTE_PORT" ]; then
-            echo "Failed to get tunnel port. Log:"
-            cat bore.log
-            exit 1
-          fi
-
-          URL="bore.pub:$REMOTE_PORT"
-          echo "=================================================="
-          echo "  >>> PERMANENT LINUX SSH SERVER IS LIVE! <<<"
-          echo "  Tailscale IP  : $URL"
-          echo "  Username      : cynetadmin"
-          echo "  Password      : Cynet@2026"
-          echo "  ------------------------------------------------"
-          echo "  💻 Connect via Terminal / CMD:"
-          echo "  >> ssh -p $REMOTE_PORT cynetadmin@bore.pub"
-          echo "  ------------------------------------------------"
-          echo "  💾 Persistent Folder : /home/cynetadmin/workspace"
-          echo "=================================================="
+      - name: Server Keep-Alive (5h 55m)
+        run: |
           for i in {1..355}; do
             sleep 60
             echo "[$i/355] Linux SSH Server is active..."
           done
 
-      # ذخیره خودکار فایل‌های پوشه دائمی قبل از ری‌استارت
-      - name: "POST-RUN: Save Workspace to Cloud"
+      - name: Save Workspace to Cloud
         uses: actions/cache@v4
         if: always()
         with:
