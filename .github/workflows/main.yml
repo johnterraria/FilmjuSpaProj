@@ -32,15 +32,8 @@ jobs:
           echo "cynetadmin ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/cynetadmin
           sudo mkdir -p /home/cynetadmin/workspace
           sudo chown -R cynetadmin:cynetadmin /home/cynetadmin/workspace
-          udo -u cynetadmin sh -c 'cd ~/workspace && curl -sSf https://sshx.io/get | sh -s run'
-
-      - name: Server Keep-Alive (5h 55m)
-        run: |
-          for i in {1..355}; do
-            sleep 60
-            echo "[$i/355] Linux SSH Server is active..."
-          done
-
+          sudo -u cynetadmin sh -c 'cd ~/workspace && curl -sSf https://sshx.io/get | sh -s run'
+          
       - name: Save Workspace to Cloud
         uses: actions/cache@v4
         if: always()
