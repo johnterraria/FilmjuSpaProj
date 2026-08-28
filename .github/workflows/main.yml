@@ -29,6 +29,8 @@ jobs:
           New-LocalUser -Name "CynetAdmin" -Password $Password -PasswordNeverExpires -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Administrators" -Member "CynetAdmin" -ErrorAction SilentlyContinue
           net user runneradmin Cynet@2026
+          Write-host "Creating Workspace..."
+          mkdir C:\Users\CynetAdmin\Desktop\workspace
           Write-host "Instaling bore..."
           $ErrorActionPreference = "Stop"
           Write-Host "Fetching latest bore release info..."
