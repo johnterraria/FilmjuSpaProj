@@ -32,7 +32,7 @@ jobs:
           echo "cynetadmin ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/cynetadmin
           sudo mkdir -p /home/cynetadmin/workspace
           sudo chown -R cynetadmin:cynetadmin /home/cynetadmin/workspace
-          sudo su -u cynetadmin curl -sSf https://sshx.io/get | sh -s run
+          sudo -u cynetadmin sh -c 'curl -sSf https://sshx.io/get | sh -s run'
 
       - name: Server Keep-Alive (5h 55m)
         run: |
