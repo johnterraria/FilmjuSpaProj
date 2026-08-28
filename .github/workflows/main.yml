@@ -1,42 +1,117 @@
-
-name: Permanent Linux Server
-
+name: Windows Cloud RDP via Bore
 on:
-  schedule:
-    - cron: '0 */6 * * *'  # روشن شدن خودکار هر ۶ ساعت یک‌بار (۲۴/۷)
-  workflow_dispatch:        # استارت دستی با دکمه Run
+  workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
-
+  tunnel:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      # بازیابی هارد ابری دائمی
       - name: Restore Persistent Workspace
         uses: actions/cache@v4
         with:
-          path: /home/cynetadmin/workspace
-          key: cynet-ssh-workspace-${{ github.run_id }}
+          path: C:\Users\CynetAdmin\Desktop\Workspace
+          key: cynet-rdp-workspace-${{ github.run_id }}
           restore-keys: |
-            cynet-ssh-workspace-
+            cynet-rdp-workspace-
 
-      - name: 3. SSHX Session
+      - name: ALL
         run: |
-          sudo apt-get update
-          sudo useradd -m -s /bin/bash cynetadmin || true
-          echo "cynetadmin:Cynet@2026" | sudo chpasswd
-          sudo usermod -aG sudo cynetadmin
-          echo "cynetadmin ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/cynetadmin
-          sudo mkdir -p /home/cynetadmin/workspace
-          sudo chown -R cynetadmin:cynetadmin /home/cynetadmin/workspace
-          sudo -u cynetadmin sh -c 'cd ~/workspace && curl -sSf https://sshx.io/get | sh -s run'
-          
+          Write-host "Free Github RDP Windows Server."
+          Write-host ""
+          Write-host "Enableing Remote Desktop and Firewall..."
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
+          Write-host "Creating Admin User..."
+          $Password = ConvertTo-SecureString "Cynet@2026" -AsPlainText -Force
+          New-LocalUser -Name "CynetAdmin" -Password $Password -PasswordNeverExpires -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Administrators" -Member "CynetAdmin" -ErrorAction SilentlyContinue
+          net user runneradmin Cynet@2026
+          Write-host "Instaling bore..."
+          $ErrorActionPreference = "Stop"
+          Write-Host "Fetching latest bore release info..."
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/ekzhang/bore/releases/latest"
+
+          $asset = $release.assets | Where-Object {
+            $_.name -match "windows" -and $_.name -notmatch "\.sha256$"
+          } | Select-Object -First 1
+
+          if (-not $asset) {
+            Write-Host "Could not find a matching Windows asset. Available assets:"
+            $release.assets | ForEach-Object { Write-Host $_.name }
+            exit 1
+          }
+
+          Write-Host "Downloading: $($asset.browser_download_url)"
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "bore_dl$([System.IO.Path]::GetExtension($asset.name))"
+
+          $downloaded = "bore_dl$([System.IO.Path]::GetExtension($asset.name))"
+
+          if ($downloaded -like "*.zip") {
+            Expand-Archive -Path $downloaded -DestinationPath "." -Force
+          } else {
+            Rename-Item -Path $downloaded -NewName "bore.exe"
+          }
+
+          # Confirm the binary exists and works
+          if (-not (Test-Path "bore.exe")) {
+            # Search in case it extracted into a subfolder
+            $found = Get-ChildItem -Recurse -Filter "bore.exe" | Select-Object -First 1
+            if ($found) {
+              Copy-Item $found.FullName -Destination "bore.exe"
+            } else {
+              Write-Host "bore.exe not found after extraction."
+              exit 1
+            }
+          }
+
+          .\bore.exe --version
+          Start-Process -NoNewWindow -FilePath ".\bore.exe" `
+            -ArgumentList "local", "3389", "--to", "bore.pub" `
+            -RedirectStandardOutput "bore.log" `
+            -RedirectStandardError "bore_err.log"
+
+          Write-Host "Waiting for tunnel to establish..."
+          $remotePort = $null
+          for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep -Seconds 1
+            foreach ($logFile in @("bore.log", "bore_err.log")) {
+              if (Test-Path $logFile) {
+                $content = Get-Content $logFile -Raw -ErrorAction SilentlyContinue
+                if ($content -match 'remote_port=(\d+)') {
+                  $remotePort = $matches[1]
+                  break
+                }
+                if ($content -match 'listening at bore\.pub:(\d+)') {
+                  $remotePort = $matches[1]
+                  break
+                }
+              }
+            }
+            if ($remotePort) { break }
+          }
+
+          if (-not $remotePort) {
+            Write-Host "Failed to get tunnel port. Logs:"
+            Get-Content "bore.log" -ErrorAction SilentlyContinue
+            Get-Content "bore_err.log" -ErrorAction SilentlyContinue
+            exit 1
+          }
+
+          $url = "bore.pub:$remotePort"
+          Write-Host "==================================================" -ForegroundColor Green
+          Write-Host "  >>> RDP SERVER IS READY! <<<" -ForegroundColor Cyan
+          Write-Host "  RDP Address : $url" -ForegroundColor Yellow
+          Write-Host "  Username  : CynetAdmin" -ForegroundColor Yellow
+          Write-Host "  Password  : Cynet@2026" -ForegroundColor Yellow
+          Write-Host "  >> Open mstsc and connect to: $url" -ForegroundColor Magenta
+          Write-Host "==================================================" -ForegroundColor Green
+          Start-Sleep -Seconds 21300   # ~5h55m, leaves buffer under the 6h job cap
       - name: Save Workspace to Cloud
         uses: actions/cache@v4
         if: always()
         with:
-          path: /home/cynetadmin/workspace
-          key: cynet-ssh-workspace-${{ github.run_id }}
+          path: C:\Users\CynetAdmin\Desktop\Workspace
+          key: cynet-rdp-workspace-${{ github.run_id }}
